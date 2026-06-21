@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Capacity Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;450;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#F6F7F9; --surface:#FFFFFF; --surface-2:#FBFBFD;
+    --ink:#191C26; --ink-2:#5A6172; --ink-3:#9298A6;
+    --line:#E7E9EE; --line-2:#D7DAE2;
+    --accent:#4F46E5; --accent-soft:#EEEDFB; --accent-ink:#3A32B8;
+    --none-bg:#F1F2F5; --none-fg:#A2A8B4;
+    --under-bg:#E7F0FB; --under-fg:#1E5BA8; --under-solid:#4A8FD6;
+    --ok-bg:#E4F4EA; --ok-fg:#1C7A45; --ok-solid:#3AAF6B;
+    --near-bg:#FCF1DA; --near-fg:#9A6912; --near-solid:#E0A12B;
+    --over-bg:#FBE6E6; --over-fg:#B22424; --over-solid:#DC5050;
+    --r-sm:7px; --r-md:11px; --r-lg:16px;
+    --shadow:0 1px 2px rgba(20,24,38,.04),0 4px 16px rgba(20,24,38,.06);
+    --shadow-lg:0 12px 40px rgba(20,24,38,.16);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    background:var(--bg); color:var(--ink);
+    -webkit-font-smoothing:antialiased; font-size:14px; line-height:1.5;
+    font-variant-numeric:tabular-nums;
+  }
+  h1,h2,h3,.disp{font-family:'Space Grotesk',sans-serif;letter-spacing:-.01em}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  input{font-family:inherit;font-size:14px}
+  ::selection{background:var(--accent-soft)}
+
+  /* ── App shell ── */
+  .app{max-width:1340px;margin:0 auto;padding:0 22px 80px}
+  .topbar{
+    position:sticky;top:0;z-index:30;background:rgba(246,247,249,.86);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:18px;
+    padding:16px 22px;margin:0 -22px 22px;
+  }
+  .brand{display:flex;align-items:center;gap:11px;min-width:0}
+  .logo{width:34px;height:34px;border-radius:9px;background:var(--accent);
+    display:grid;place-items:center;flex-shrink:0;position:relative;overflow:hidden}
+  .logo::before{content:"";position:absolute;inset:0;
+    background:
+      linear-gradient(transparent 60%,rgba(255,255,255,.28) 60%) 0 0/100% 33% repeat-y,
+      linear-gradient(90deg,transparent 78%,rgba(255,255,255,.22) 78%) 0 0/25% 100% repeat-x}
+  .logo b{font-family:'Space Grotesk';color:#fff;font-weight:700;font-size:16px;position:relative;z-index:1}
+  .brand-txt h1{font-size:17px;font-weight:600;line-height:1.1}
+  .brand-txt p{font-size:11.5px;color:var(--ink-3);font-weight:450}
+
+  .seg{display:flex;background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--r-md);padding:3px;gap:2px}
+  .seg button{padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;
+    color:var(--ink-2);display:flex;align-items:center;gap:7px;transition:.15s}
+  .seg button.on{background:var(--accent);color:#fff;box-shadow:0 1px 4px rgba(79,70,229,.35)}
+  .seg button:not(.on):hover{background:var(--surface-2);color:var(--ink)}
+  .spacer{flex:1}
+
+  .monthnav{display:flex;align-items:center;gap:2px;background:var(--surface);
+    border:1px solid var(--line);border-radius:var(--r-md);padding:3px}
+  .monthnav button{width:30px;height:30px;border-radius:7px;color:var(--ink-2);
+    display:grid;place-items:center;font-size:17px;transition:.12s}
+  .monthnav button:hover{background:var(--surface-2);color:var(--ink)}
+  .monthnav .lbl{font-size:12.5px;font-weight:500;padding:0 8px;min-width:148px;text-align:center;color:var(--ink-2)}
+  .monthnav .lbl b{color:var(--ink);font-weight:600}
+
+  .iconbtn{width:38px;height:38px;border-radius:var(--r-md);border:1px solid var(--line);
+    background:var(--surface);color:var(--ink-2);display:grid;place-items:center;
+    font-size:18px;transition:.12s;position:relative}
+  .iconbtn:hover{border-color:var(--line-2);color:var(--ink);background:var(--surface-2)}
+
+  /* ── Menu ── */
+  .menu{position:absolute;top:46px;right:0;background:var(--surface);
+    border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow-lg);
+    padding:6px;min-width:218px;z-index:40;display:none}
+  .menu.open{display:block;animation:pop .14s ease}
+  @keyframes pop{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
+  .menu button{display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+    padding:9px 11px;border-radius:8px;font-size:13px;font-weight:450;color:var(--ink)}
+  .menu button:hover{background:var(--surface-2)}
+  .menu button .ic{width:18px;text-align:center;color:var(--ink-3);font-size:15px}
+  .menu .sep{height:1px;background:var(--line);margin:5px 4px}
+  .menu button.danger{color:var(--over-fg)}
+  .menu button.danger .ic{color:var(--over-fg)}
+
+  /* ── Legend ── */
+  .legend{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+  .legend .ttl{font-size:11.5px;font-weight:500;color:var(--ink-3);
+    text-transform:uppercase;letter-spacing:.06em;margin-right:4px}
+  .chip{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;
+    border-radius:20px;font-size:12px;font-weight:500;border:1px solid transparent}
+  .chip .dot{width:9px;height:9px;border-radius:50%}
+
+  /* ── Grid ── */
+  .gridwrap{background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--r-lg);box-shadow:var(--shadow);overflow:auto;max-height:74vh}
+  table.grid{border-collapse:separate;border-spacing:0;width:100%}
+  table.grid th,table.grid td{border-bottom:1px solid var(--line);white-space:nowrap}
+  table.grid thead th{position:sticky;top:0;z-index:12;background:var(--surface);
+    padding:13px 10px;font-family:'Space Grotesk';font-size:12px;font-weight:500;
+    color:var(--ink-2);text-align:center;border-bottom:1.5px solid var(--line-2)}
+  table.grid thead th .yr{display:block;font-size:10px;color:var(--ink-3);font-weight:400;margin-top:1px}
+  .corner{position:sticky;left:0;top:0;z-index:22 !important;text-align:left !important;
+    padding-left:20px !important;min-width:210px}
+  .corner .sub{font-family:'Inter';font-size:11px;font-weight:450;color:var(--ink-3);
+    text-transform:none;letter-spacing:0;margin-top:1px}
+  .devcell{position:sticky;left:0;z-index:8;background:var(--surface);
+    padding:11px 14px 11px 20px;min-width:210px;border-right:1px solid var(--line)}
+  .devcell .nm{display:flex;align-items:center;gap:10px}
+  .avatar{width:30px;height:30px;border-radius:8px;flex-shrink:0;display:grid;
+    place-items:center;font-size:11.5px;font-weight:600;font-family:'Space Grotesk';color:#fff}
+  .devcell .info{min-width:0}
+  .devcell .info .n{font-size:13.5px;font-weight:500;line-height:1.2;overflow:hidden;text-overflow:ellipsis}
+  .devcell .info .avg{font-size:11px;color:var(--ink-3);font-weight:450}
+  tbody tr:hover .devcell{background:var(--surface-2)}
+
+  .cell{padding:6px;text-align:center;cursor:pointer;transition:.12s;min-width:96px;position:relative}
+  .cell:hover{box-shadow:inset 0 0 0 2px var(--accent)}
+  .cell .box{border-radius:9px;padding:8px 6px 7px;border:1px solid transparent;transition:.12s}
+  .cell .pct{font-family:'Space Grotesk';font-size:16px;font-weight:600;line-height:1}
+  .cell .work{font-size:10px;font-weight:450;line-height:1.25;margin-top:4px;
+    overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    max-width:88px;margin-inline:auto;opacity:.85}
+  .cell .empty{font-size:11px;color:var(--none-fg);font-weight:450}
+  .b-none .box{background:var(--none-bg)} .b-none .pct{color:var(--none-fg);font-weight:400}
+  .b-under .box{background:var(--under-bg)} .b-under .pct,.b-under .work{color:var(--under-fg)}
+  .b-ok .box{background:var(--ok-bg)} .b-ok .pct,.b-ok .work{color:var(--ok-fg)}
+  .b-near .box{background:var(--near-bg)} .b-near .pct,.b-near .work{color:var(--near-fg)}
+  .b-over .box{background:var(--over-bg)} .b-over .pct,.b-over .work{color:var(--over-fg)}
+  .b-over .box{border-color:rgba(220,80,80,.4)}
+
+  tfoot td{position:sticky;bottom:0;background:var(--surface);z-index:9;
+    border-top:1.5px solid var(--line-2);padding:10px 6px;text-align:center}
+  tfoot .devcell{background:var(--surface);font-family:'Space Grotesk';font-weight:600;font-size:13px}
+  tfoot .tpct{font-family:'Space Grotesk';font-weight:600;font-size:14px}
+
+  /* ── Dashboard ── */
+  .dash-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px}
+  .dash-head h2{font-size:21px;font-weight:600}
+  .dash-head h2 span{color:var(--accent)}
+  .dash-head p{font-size:13px;color:var(--ink-2)}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(186px,1fr));gap:14px;margin-bottom:22px}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+    padding:17px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .kpi .lab{font-size:12px;font-weight:500;color:var(--ink-2);display:flex;align-items:center;gap:7px}
+  .kpi .lab i{width:7px;height:7px;border-radius:50%}
+  .kpi .val{font-family:'Space Grotesk';font-size:30px;font-weight:600;margin-top:9px;line-height:1}
+  .kpi .val small{font-size:15px;font-weight:500;color:var(--ink-3)}
+  .kpi .sub{font-size:11.5px;color:var(--ink-3);margin-top:5px}
+
+  .panels{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;align-items:start}
+  @media(max-width:920px){.panels{grid-template-columns:1fr}}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+    box-shadow:var(--shadow);overflow:hidden}
+  .panel .ph{padding:15px 20px 12px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;justify-content:space-between}
+  .panel .ph h3{font-size:14.5px;font-weight:600}
+  .panel .ph .hint{font-size:11.5px;color:var(--ink-3)}
+  .panel .pb{padding:16px 20px}
+  .chartbox{position:relative;height:288px;width:100%}
+
+  .breakdown{display:flex;flex-direction:column}
+  .brow{display:flex;align-items:center;gap:12px;padding:11px 20px;border-bottom:1px solid var(--line)}
+  .brow:last-child{border-bottom:none}
+  .brow .av{width:28px;height:28px;border-radius:7px;flex-shrink:0;display:grid;
+    place-items:center;font-size:11px;font-weight:600;font-family:'Space Grotesk';color:#fff}
+  .brow .meta{min-width:0;flex:0 0 140px}
+  .brow .meta .n{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .brow .meta .w{font-size:11px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .brow .track{flex:1;height:9px;border-radius:6px;background:var(--none-bg);overflow:hidden;position:relative}
+  .brow .track .fill{height:100%;border-radius:6px;transition:width .5s cubic-bezier(.3,1,.4,1)}
+  .brow .pc{font-family:'Space Grotesk';font-size:13px;font-weight:600;flex:0 0 46px;text-align:right}
+  .empty-state{padding:54px 20px;text-align:center;color:var(--ink-3)}
+  .empty-state .ic{font-size:40px;opacity:.5}
+  .empty-state p{margin-top:10px;font-size:13.5px}
+
+  /* ── Modal ── */
+  .scrim{position:fixed;inset:0;background:rgba(25,28,38,.42);z-index:50;display:none;
+    align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
+  .scrim.open{display:flex;animation:fade .15s ease}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .modal{background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow-lg);
+    width:100%;max-width:480px;max-height:90vh;overflow:auto;animation:rise .2s cubic-bezier(.2,1,.3,1)}
+  .modal.wide{max-width:560px}
+  @keyframes rise{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+  .mh{padding:20px 22px 16px;border-bottom:1px solid var(--line);display:flex;
+    align-items:center;gap:13px;position:sticky;top:0;background:var(--surface);z-index:2}
+  .mh .av{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;
+    color:#fff;font-weight:600;font-family:'Space Grotesk';font-size:14px;flex-shrink:0}
+  .mh .t{flex:1;min-width:0}
+  .mh .t h3{font-size:16px;font-weight:600}
+  .mh .t p{font-size:12.5px;color:var(--ink-3)}
+  .mh .close{width:32px;height:32px;border-radius:8px;color:var(--ink-3);display:grid;
+    place-items:center;font-size:20px;transition:.12s}
+  .mh .close:hover{background:var(--surface-2);color:var(--ink)}
+  .mb{padding:18px 22px}
+  .totline{display:flex;align-items:center;justify-content:space-between;
+    padding:12px 15px;border-radius:var(--r-md);margin-bottom:16px;transition:.2s}
+  .totline .l{font-size:12.5px;font-weight:500}
+  .totline .v{font-family:'Space Grotesk';font-size:22px;font-weight:600}
+
+  .item{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+  .item input.lab{flex:1;padding:9px 12px;border:1px solid var(--line);border-radius:var(--r-sm);
+    color:var(--ink);transition:.12s;min-width:0}
+  .item input.lab:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .item input.lab::placeholder{color:var(--ink-3)}
+  .pctbox{display:flex;align-items:center;border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;flex-shrink:0}
+  .pctbox input{width:44px;padding:9px 0 9px 8px;border:none;text-align:right;color:var(--ink);font-weight:500}
+  .pctbox input:focus{outline:none}
+  .pctbox span{padding:9px 8px 9px 1px;color:var(--ink-3);font-size:13px}
+  .item .del{width:30px;height:30px;border-radius:7px;color:var(--ink-3);display:grid;
+    place-items:center;font-size:16px;flex-shrink:0;transition:.12s}
+  .item .del:hover{background:var(--over-bg);color:var(--over-fg)}
+  .additem{display:flex;align-items:center;gap:8px;width:100%;padding:10px 12px;
+    border:1px dashed var(--line-2);border-radius:var(--r-sm);color:var(--accent);
+    font-size:13px;font-weight:500;justify-content:center;transition:.12s;margin-top:2px}
+  .additem:hover{background:var(--accent-soft);border-color:var(--accent)}
+  .presets{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap}
+  .presets span{font-size:11.5px;color:var(--ink-3);align-self:center;margin-right:2px}
+  .preset{padding:5px 11px;border-radius:20px;border:1px solid var(--line);
+    font-size:12px;font-weight:500;color:var(--ink-2);transition:.12s}
+  .preset:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  .mf{padding:14px 22px 20px;display:flex;gap:10px;justify-content:flex-end;
+    border-top:1px solid var(--line);position:sticky;bottom:0;background:var(--surface)}
+  .btn{padding:10px 18px;border-radius:var(--r-sm);font-size:13.5px;font-weight:500;transition:.12s}
+  .btn.primary{background:var(--accent);color:#fff;box-shadow:0 1px 4px rgba(79,70,229,.35)}
+  .btn.primary:hover{background:var(--accent-ink)}
+  .btn.ghost{color:var(--ink-2);border:1px solid var(--line)}
+  .btn.ghost:hover{background:var(--surface-2);color:var(--ink)}
+
+  /* Dev manager rows */
+  .devrow{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+  .devrow .av{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;
+    color:#fff;font-weight:600;font-family:'Space Grotesk';font-size:11px;flex-shrink:0}
+  .devrow input{flex:1;padding:9px 12px;border:1px solid var(--line);border-radius:var(--r-sm);color:var(--ink)}
+  .devrow input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .devrow .del{width:32px;height:32px;border-radius:7px;color:var(--ink-3);display:grid;place-items:center;font-size:16px;transition:.12s;flex-shrink:0}
+  .devrow .del:hover{background:var(--over-bg);color:var(--over-fg)}
+
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--ink);color:#fff;padding:11px 20px;border-radius:var(--r-md);font-size:13px;
+    font-weight:450;box-shadow:var(--shadow-lg);opacity:0;transition:.25s;z-index:60;pointer-events:none}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .hidden{display:none !important}
+  @media(prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo"><b>C</b></div>
+      <div class="brand-txt">
+        <h1>Capacity Planner</h1>
+        <p id="brandsub">12 developers · 12 months</p>
+      </div>
+    </div>
+    <div class="seg" role="tablist">
+      <button id="tab-plan" class="on" onclick="setView('plan')"><span style="font-size:15px">▦</span> Planner</button>
+      <button id="tab-dash" onclick="setView('dash')"><span style="font-size:15px">◔</span> Dashboard</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="monthnav" id="monthnav-wrap">
+      <button onclick="shiftWindow(-1)" aria-label="Earlier months">‹</button>
+      <span class="lbl" id="winlbl">—</span>
+      <button onclick="shiftWindow(1)" aria-label="Later months">›</button>
+    </div>
+    <div style="position:relative">
+      <button class="iconbtn" onclick="toggleMenu(event)" aria-label="More options">⋯</button>
+      <div class="menu" id="menu">
+        <button onclick="openDevManager()"><span class="ic">◉</span> Manage developers</button>
+        <button onclick="goToday()"><span class="ic">⊙</span> Jump to this month</button>
+        <div class="sep"></div>
+        <button onclick="loadSample()"><span class="ic">✦</span> Fill with sample data</button>
+        <button onclick="exportJSON()"><span class="ic">↓</span> Save backup (.json)</button>
+        <button onclick="document.getElementById('importer').click()"><span class="ic">↑</span> Load backup (.json)</button>
+        <button onclick="exportCSV()"><span class="ic">▤</span> Export to CSV</button>
+        <div class="sep"></div>
+        <button class="danger" onclick="clearAll()"><span class="ic">⌫</span> Clear all data</button>
+      </div>
+    </div>
+    <input type="file" id="importer" accept="application/json" class="hidden" onchange="importJSON(event)">
+  </div>
+
+  <div id="view-plan">
+    <div class="legend" id="legend"></div>
+    <div class="gridwrap"><table class="grid" id="grid"></table></div>
+  </div>
+
+  <div id="view-dash" class="hidden"></div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ════════════ STATE ════════════ */
+const NAMES = ["Abhinav Nagar","Madhan Santhanam","Mohammad Akram","Nevishkumar Jariwala",
+  "Nilkanth Verma","Prajakta Jadyar","Rahul Khamankar","Ramisetty Venkatesh",
+  "Sakshi Pabreja","Shubham Taneja","Sunil Kumar R","Udit Gupta"];
+const PALETTE = ["#4F46E5","#0F9D8E","#D8612E","#B23A6B","#3266AD","#6B46C1",
+  "#1C7A45","#C28A0E","#9A4DCC","#0E7490","#BE4B4B","#5A6172"];
+const MONTHS_ABBR=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTHS_FULL=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const KEY="capacityPlanner.v1";
+const WINDOW=12;
+
+let state, view='plan', winStart, dashMonthKey, editCtx=null;
+
+function uid(){return Math.random().toString(36).slice(2,9)}
+function monthKey(y,m){return y+"-"+String(m+1).padStart(2,'0')}
+function parseKey(k){const[y,m]=k.split('-');return{y:+y,m:+m-1}}
+function fmtShort(k){const{y,m}=parseKey(k);return MONTHS_ABBR[m]+" '"+String(y).slice(2)}
+function fmtFull(k){const{y,m}=parseKey(k);return MONTHS_FULL[m]+" "+y}
+
+function defaultState(){
+  const now=new Date();
+  return {
+    start: monthKey(now.getFullYear(), now.getMonth()),
+    devs: NAMES.map((n,i)=>({id:uid(),name:n,color:PALETTE[i%PALETTE.length]})),
+    data: {}   // data[devId][monthKey] = [{id,label,pct}]
+  };
+}
+/* ===== SUPABASE — cloud sync ===== */
+const SUPABASE_URL = "https://ibwvxtocwjevwgeeghay.supabase.co";
+const SUPABASE_KEY = "sb_publishable_Rs9X3alYarXyBSnFJ-I6JQ_T8XKQlm2";
+const PLAN_ID = "team";
+/* ================================= */
+
+let sb = null, cloud = false, saveTimer = null;
+if (SUPABASE_URL.includes("supabase.co") && SUPABASE_KEY && window.supabase) {
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  cloud = true;
+}
+
+function cacheLocal(){ try{ localStorage.setItem(KEY, JSON.stringify(state)) }catch(e){} }
+
+async function load(){
+  try{ const raw = localStorage.getItem(KEY); if(raw) state = JSON.parse(raw); }catch(e){}
+  if(!state) state = defaultState();
+  if(cloud){
+    try{
+      const { data, error } = await sb.from('plans')
+        .select('state').eq('id', PLAN_ID).single();
+      if(error) throw error;
+      if(data && data.state && data.state.devs){ state = data.state; cacheLocal(); }
+      else { cacheLocal(); save(); }   // seed an empty cloud row
+    }catch(e){ toast('Cloud unavailable — using local copy'); }
+  }
+}
+
+function save(){
+  cacheLocal();
+  if(!cloud) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async ()=>{
+    try{
+      const { error } = await sb.from('plans')
+        .update({ state, updated_at: new Date().toISOString() })
+        .eq('id', PLAN_ID);
+      if(error) throw error;
+    }catch(e){ toast('Could not sync to cloud'); }
+  }, 600);
+}
+
+function windowKeys(startKey){
+  const{y,m}=parseKey(startKey);const out=[];
+  for(let i=0;i<WINDOW;i++){const d=new Date(y,m+i,1);out.push(monthKey(d.getFullYear(),d.getMonth()))}
+  return out;
+}
+function items(devId,mKey){return (state.data[devId]&&state.data[devId][mKey])||[]}
+function total(devId,mKey){return items(devId,mKey).reduce((s,it)=>s+(+it.pct||0),0)}
+function setItems(devId,mKey,arr){
+  if(!state.data[devId])state.data[devId]={};
+  const clean=arr.filter(it=>(+it.pct||0)>0||(it.label||'').trim());
+  if(clean.length)state.data[devId][mKey]=clean; else delete state.data[devId][mKey];
+  save();
+}
+
+/* ════════════ BANDS ════════════ */
+function band(p){
+  if(p<=0)  return{k:'none', lab:'No allocation', fg:'var(--none-fg)', solid:'#C7CCD6'};
+  if(p<80)  return{k:'under',lab:'Under-utilised',fg:'var(--under-fg)',solid:'var(--under-solid)'};
+  if(p<95)  return{k:'ok',   lab:'Healthy',        fg:'var(--ok-fg)',   solid:'var(--ok-solid)'};
+  if(p<=100)return{k:'near', lab:'Near capacity', fg:'var(--near-fg)', solid:'var(--near-solid)'};
+  return            {k:'over', lab:'Overallocated', fg:'var(--over-fg)', solid:'var(--over-solid)'};
+}
+function initials(n){const p=n.trim().split(/\s+/);return((p[0]||'')[0]||'').toUpperCase()+((p[1]||'')[0]||'').toUpperCase()}
+
+/* ════════════ VIEW SWITCH ════════════ */
+function setView(v){
+  view=v;
+  document.getElementById('tab-plan').classList.toggle('on',v==='plan');
+  document.getElementById('tab-dash').classList.toggle('on',v==='dash');
+  document.getElementById('view-plan').classList.toggle('hidden',v!=='plan');
+  document.getElementById('view-dash').classList.toggle('hidden',v!=='dash');
+  document.getElementById('monthnav-wrap').style.visibility = v==='plan'?'visible':'hidden';
+  render();
+}
+function shiftWindow(d){
+  const{y,m}=parseKey(winStart);const nd=new Date(y,m+d,1);
+  winStart=monthKey(nd.getFullYear(),nd.getMonth());renderPlanner();updateWinLbl();
+}
+function goToday(){const n=new Date();winStart=monthKey(n.getFullYear(),n.getMonth());
+  if(view!=='plan')setView('plan');else{renderPlanner();updateWinLbl()} closeMenu();}
+function updateWinLbl(){
+  const ks=windowKeys(winStart);
+  document.getElementById('winlbl').innerHTML='<b>'+fmtShort(ks[0])+'</b> – <b>'+fmtShort(ks[11])+'</b>';
+}
+
+/* ════════════ RENDER ════════════ */
+function render(){
+  document.getElementById('brandsub').textContent=state.devs.length+" developers · 12 months";
+  if(view==='plan'){renderLegend();renderPlanner();updateWinLbl()}
+  else renderDashboard();
+}
+function renderLegend(){
+  const defs=[['none','No work'],['under','Under 80%'],['ok','80–94%'],['near','95–100%'],['over','Over 100%']];
+  document.getElementById('legend').innerHTML='<span class="ttl">Utilisation</span>'+
+    defs.map(([k,l])=>{const b=band(k==='none'?0:k==='under'?50:k==='ok'?85:k==='near'?98:120);
+      return `<span class="chip" style="background:var(--${k}-bg);color:${b.fg}">
+        <span class="dot" style="background:${b.solid}"></span>${l}</span>`}).join('');
+}
+
+function renderPlanner(){
+  const ks=windowKeys(winStart);
+  let h='<thead><tr><th class="corner">Developer<div class="sub">click any month to set work</div></th>';
+  ks.forEach(k=>{const{m}=parseKey(k);h+=`<th>${MONTHS_ABBR[m]}<span class="yr">${fmtFull(k).split(' ')[1]}</span></th>`});
+  h+='</tr></thead><tbody>';
+
+  state.devs.forEach(dev=>{
+    const avgVals=ks.map(k=>total(dev.id,k)).filter(v=>v>0);
+    const avg=avgVals.length?Math.round(avgVals.reduce((a,b)=>a+b,0)/avgVals.length):0;
+    h+=`<tr><td class="devcell"><div class="nm">
+      <div class="avatar" style="background:${dev.color}">${initials(dev.name)}</div>
+      <div class="info"><div class="n">${esc(dev.name)}</div>
+      <div class="avg">${avg?('avg '+avg+'% loaded'):'unallocated'}</div></div></div></td>`;
+    ks.forEach(k=>{
+      const p=total(dev.id,k),b=band(p),its=items(dev.id,k);
+      const labels=its.filter(i=>(i.label||'').trim()).map(i=>esc(i.label)).join(', ');
+      h+=`<td class="cell b-${b.k}" onclick="openCell('${dev.id}','${k}')" title="${esc(dev.name)} — ${fmtFull(k)}">
+        <div class="box">`+
+        (p>0?`<div class="pct">${p}%</div>${labels?`<div class="work">${labels}</div>`:''}`
+            :`<div class="empty">+</div>`)+
+        `</div></td>`;
+    });
+    h+='</tr>';
+  });
+  h+='</tbody><tfoot><tr><td class="devcell">Team total</td>';
+  ks.forEach(k=>{
+    let sum=0,cap=0;state.devs.forEach(d=>{sum+=total(d.id,k);cap+=100});
+    const avg=cap?Math.round(sum/state.devs.length):0;const b=band(avg);
+    h+=`<td><span class="tpct" style="color:${b.fg}">${avg}%</span></td>`;
+  });
+  h+='</tr></tfoot>';
+  document.getElementById('grid').innerHTML=h;
+}
+
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+/* ════════════ DASHBOARD ════════════ */
+let chart=null;
+function renderDashboard(){
+  const ks=windowKeys(state.start);
+  if(!dashMonthKey||!ks.includes(dashMonthKey))dashMonthKey=state.start;
+  const dk=dashMonthKey;
+
+  const utils=state.devs.map(d=>({dev:d,p:total(d.id,dk),its:items(d.id,dk)}));
+  const active=utils.filter(u=>u.p>0);
+  const teamAvg=state.devs.length?Math.round(state.devs.reduce((s,d)=>s+total(d.id,dk),0)/state.devs.length):0;
+  const over=utils.filter(u=>u.p>100).length;
+  const near=utils.filter(u=>u.p>=95&&u.p<=100).length;
+  const spareFTE=(utils.reduce((s,u)=>s+Math.max(0,100-u.p),0)/100);
+  const overFTE=(utils.reduce((s,u)=>s+Math.max(0,u.p-100),0)/100);
+
+  const monthOpts=ks.map(k=>`<option value="${k}" ${k===dk?'selected':''}>${fmtFull(k)}</option>`).join('');
+
+  let html=`<div class="dash-head">
+    <div><h2>Team overview · <span>${fmtFull(dk)}</span></h2>
+    <p>${active.length} of ${state.devs.length} developers allocated</p></div>
+    <select onchange="dashMonthKey=this.value;renderDashboard()" style="padding:9px 14px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);color:var(--ink);font-weight:500;font-size:13px;cursor:pointer">${monthOpts}</select>
+  </div>`;
+
+  const tb=band(teamAvg);
+  html+=`<div class="kpis">
+    <div class="kpi"><div class="lab"><i style="background:${tb.solid}"></i>Team utilisation</div>
+      <div class="val" style="color:${tb.fg}">${teamAvg}<small>%</small></div>
+      <div class="sub">${tb.lab.toLowerCase()} on average</div></div>
+    <div class="kpi"><div class="lab"><i style="background:var(--over-solid)"></i>Overallocated</div>
+      <div class="val" style="color:${over?'var(--over-fg)':'var(--ink)'}">${over}</div>
+      <div class="sub">${over?('≈ '+overFTE.toFixed(1)+' FTE over capacity'):'nobody over 100%'}</div></div>
+    <div class="kpi"><div class="lab"><i style="background:var(--near-solid)"></i>Near capacity</div>
+      <div class="val">${near}</div><div class="sub">at 95–100% utilisation</div></div>
+    <div class="kpi"><div class="lab"><i style="background:var(--under-solid)"></i>Spare capacity</div>
+      <div class="val">${spareFTE.toFixed(1)}<small> FTE</small></div>
+      <div class="sub">unallocated developer-time</div></div>
+  </div>`;
+
+  html+=`<div class="panels">
+    <div class="panel"><div class="ph"><h3>Team utilisation · next 12 months</h3>
+      <span class="hint">average % across ${state.devs.length} developers</span></div>
+      <div class="pb"><div class="chartbox"><canvas id="trend" role="img" aria-label="Bar chart of average team utilisation percent across the next twelve months"></canvas></div></div></div>
+    <div class="panel"><div class="ph"><h3>Who's working on what</h3>
+      <span class="hint">${fmtShort(dk)}</span></div>`;
+
+  if(active.length){
+    html+='<div class="breakdown">';
+    active.sort((a,b)=>b.p-a.p).forEach(u=>{
+      const b=band(u.p);const w=u.its.filter(i=>(i.label||'').trim()).map(i=>esc(i.label)).join(', ')||'—';
+      html+=`<div class="brow"><div class="av" style="background:${u.dev.color}">${initials(u.dev.name)}</div>
+        <div class="meta"><div class="n">${esc(u.dev.name)}</div><div class="w">${w}</div></div>
+        <div class="track"><div class="fill" style="width:${Math.min(u.p,100)}%;background:${b.solid}"></div></div>
+        <div class="pc" style="color:${b.fg}">${u.p}%</div></div>`;
+    });
+    html+='</div>';
+  } else {
+    html+=`<div class="empty-state"><div class="ic">◔</div><p>No allocations for ${fmtFull(dk)} yet.<br>Add work in the Planner, or load sample data from the ⋯ menu.</p></div>`;
+  }
+  html+='</div></div>';
+  document.getElementById('view-dash').innerHTML=html;
+  drawTrend(ks);
+}
+
+function drawTrend(ks){
+  const cv=document.getElementById('trend');if(!cv||!window.Chart)return;
+  const data=ks.map(k=>state.devs.length?Math.round(state.devs.reduce((s,d)=>s+total(d.id,k),0)/state.devs.length):0);
+  const colors=data.map(p=>{const b=band(p);
+    return {none:'#C7CCD6',under:'#4A8FD6',ok:'#3AAF6B',near:'#E0A12B',over:'#DC5050'}[b.k]});
+  if(chart)chart.destroy();
+  chart=new Chart(cv,{type:'bar',
+    data:{labels:ks.map(fmtShort),datasets:[{data,backgroundColor:colors,borderRadius:6,maxBarThickness:34}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+'% team utilisation'}}},
+      scales:{
+        y:{beginAtZero:true,suggestedMax:120,ticks:{callback:v=>v+'%',font:{family:'Inter'},color:'#9298A6'},
+           grid:{color:'#EDEFF3'},border:{display:false}},
+        x:{ticks:{font:{family:'Inter',size:11},color:'#5A6172'},grid:{display:false},border:{display:false}}
+      }}});
+}
+
+/* ════════════ CELL EDITOR ════════════ */
+function openCell(devId,mKey){
+  const dev=state.devs.find(d=>d.id===devId);
+  editCtx={devId,mKey,rows:items(devId,mKey).map(i=>({id:i.id||uid(),label:i.label||'',pct:+i.pct||0}))};
+  if(!editCtx.rows.length)editCtx.rows=[{id:uid(),label:'',pct:0}];
+  const sc=document.getElementById('scrim');
+  sc.innerHTML=`<div class="modal" onclick="event.stopPropagation()">
+    <div class="mh"><div class="av" style="background:${dev.color}">${initials(dev.name)}</div>
+      <div class="t"><h3>${esc(dev.name)}</h3><p>${fmtFull(mKey)} · what are they working on?</p></div>
+      <button class="close" onclick="closeModal()" aria-label="Close">×</button></div>
+    <div class="mb">
+      <div class="totline" id="totline"></div>
+      <div id="itemlist"></div>
+      <button class="additem" onclick="addRow()">+ Add work item</button>
+      <div class="presets"><span>Quick set total:</span>
+        <button class="preset" onclick="quickSet(50)">50%</button>
+        <button class="preset" onclick="quickSet(80)">80%</button>
+        <button class="preset" onclick="quickSet(100)">100%</button>
+        <button class="preset" onclick="quickSet(0)">Clear</button></div>
+    </div>
+    <div class="mf"><button class="btn ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn primary" onclick="saveCell()">Save</button></div>
+  </div>`;
+  sc.classList.add('open');sc.onclick=closeModal;
+  renderRows();
+  setTimeout(()=>{const f=sc.querySelector('.item input.lab');if(f)f.focus()},60);
+}
+function renderRows(){
+  const list=document.getElementById('itemlist');
+  list.innerHTML=editCtx.rows.map((r,i)=>`<div class="item">
+    <input class="lab" value="${esc(r.label)}" placeholder="e.g. Platform migration, On-call, Support"
+      oninput="editCtx.rows[${i}].label=this.value">
+    <div class="pctbox"><input type="number" min="0" max="200" value="${r.pct||''}" placeholder="0"
+      oninput="editCtx.rows[${i}].pct=+this.value||0;refreshTot()"><span>%</span></div>
+    <button class="del" onclick="delRow(${i})" aria-label="Remove">×</button></div>`).join('');
+  refreshTot();
+}
+function refreshTot(){
+  const t=editCtx.rows.reduce((s,r)=>s+(+r.pct||0),0);const b=band(t);
+  const el=document.getElementById('totline');
+  el.style.background=`var(--${b.k}-bg)`;
+  el.innerHTML=`<span class="l" style="color:${b.fg}">${b.lab}</span>
+    <span class="v" style="color:${b.fg}">${t}%</span>`;
+}
+function addRow(){editCtx.rows.push({id:uid(),label:'',pct:0});renderRows();
+  setTimeout(()=>{const ins=document.querySelectorAll('#itemlist .item input.lab');ins[ins.length-1].focus()},20)}
+function delRow(i){editCtx.rows.splice(i,1);if(!editCtx.rows.length)editCtx.rows=[{id:uid(),label:'',pct:0}];renderRows()}
+function quickSet(p){editCtx.rows=p>0?[{id:uid(),label:editCtx.rows[0]?.label||'',pct:p}]:[{id:uid(),label:'',pct:0}];renderRows()}
+function saveCell(){setItems(editCtx.devId,editCtx.mKey,editCtx.rows);closeModal();render();toast('Saved')}
+
+/* ════════════ DEV MANAGER ════════════ */
+function openDevManager(){
+  closeMenu();
+  const sc=document.getElementById('scrim');
+  sc.innerHTML=`<div class="modal wide" onclick="event.stopPropagation()">
+    <div class="mh"><div class="av" style="background:var(--accent)">◉</div>
+      <div class="t"><h3>Manage developers</h3><p>add, rename or remove team members</p></div>
+      <button class="close" onclick="closeModal()" aria-label="Close">×</button></div>
+    <div class="mb"><div id="devlist"></div>
+      <button class="additem" onclick="addDev()">+ Add developer</button></div>
+    <div class="mf"><button class="btn primary" onclick="closeModal();render();toast('Team updated')">Done</button></div>
+  </div>`;
+  sc.classList.add('open');sc.onclick=closeModal;renderDevList();
+}
+function renderDevList(){
+  document.getElementById('devlist').innerHTML=state.devs.map((d,i)=>`<div class="devrow">
+    <div class="av" style="background:${d.color}">${initials(d.name)}</div>
+    <input value="${esc(d.name)}" oninput="state.devs[${i}].name=this.value;save()" placeholder="Developer name">
+    <button class="del" onclick="removeDev('${d.id}')" aria-label="Remove">×</button></div>`).join('');
+}
+function addDev(){state.devs.push({id:uid(),name:'',color:PALETTE[state.devs.length%PALETTE.length]});save();renderDevList();
+  setTimeout(()=>{const ins=document.querySelectorAll('#devlist input');ins[ins.length-1].focus()},20)}
+function removeDev(id){state.devs=state.devs.filter(d=>d.id!==id);delete state.data[id];save();renderDevList()}
+
+/* ════════════ MODAL/MENU ════════════ */
+function closeModal(){const sc=document.getElementById('scrim');sc.classList.remove('open');setTimeout(()=>sc.innerHTML='',150);editCtx=null}
+function toggleMenu(e){e.stopPropagation();document.getElementById('menu').classList.toggle('open')}
+function closeMenu(){document.getElementById('menu').classList.remove('open')}
+document.addEventListener('click',()=>closeMenu());
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeMenu()}});
+
+/* ════════════ DATA OPS ════════════ */
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1700)}
+function exportJSON(){closeMenu();
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  dl(blob,'capacity-planner-backup.json');toast('Backup saved')}
+function importJSON(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{try{const o=JSON.parse(r.result);if(o.devs&&o.data){state=o;save();render();toast('Backup loaded')}else toast('Not a valid backup file')}catch{toast('Could not read file')}};
+  r.readAsText(f);e.target.value=''}
+function exportCSV(){closeMenu();
+  const ks=windowKeys(state.start);
+  let rows=[['Developer',...ks.map(fmtFull)]];
+  state.devs.forEach(d=>rows.push([d.name,...ks.map(k=>total(d.id,k)+'%')]));
+  rows.push(['Team average',...ks.map(k=>(state.devs.length?Math.round(state.devs.reduce((s,d)=>s+total(d.id,k),0)/state.devs.length):0)+'%')]);
+  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  dl(new Blob([csv],{type:'text/csv'}),'capacity-utilisation.csv');toast('CSV exported')}
+function dl(blob,name){const u=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=u;a.download=name;a.click();URL.revokeObjectURL(u)}
+function clearAll(){closeMenu();
+  if(confirm('Clear all allocations? Developers stay, but every month resets to empty. This cannot be undone.')){
+    state.data={};save();render();toast('All allocations cleared')}}
+
+function loadSample(){closeMenu();
+  const ks=windowKeys(state.start);
+  const work=[["Payments service migration","Code review"],["API gateway rebuild","Support rota"],
+    ["Front-end redesign","Bug triage"],["Infra automation","On-call"],["Auth service","Tech debt"],
+    ["Reporting module","QA support"],["Data pipeline","Mentoring"],["Mobile app","Standups"],
+    ["Design system","Docs"],["Search revamp","Incident cover"],["Platform reliability","On-call"],["Onboarding flow","Pairing"]];
+  const profile=[95,110,80,100,88,72,90,105,60,85,98,78];
+  state.devs.forEach((d,i)=>{
+    const base=profile[i%profile.length];
+    ks.forEach((k,mi)=>{
+      const flux=[(mi*7+i*3)%18-7];const tot=Math.max(40,Math.min(135,base+flux[0]));
+      const main=Math.round(tot*0.72/5)*5;const sec=tot-main;
+      state.data[d.id]=state.data[d.id]||{};
+      const w=work[i%work.length];
+      state.data[d.id][k]=[{id:uid(),label:w[0],pct:main},{id:uid(),label:w[1],pct:sec}];
+    });
+  });
+  save();render();toast('Sample data loaded — clear it anytime from ⋯')}
+
+/* ════════════ INIT ════════════ */
+(async () => {
+  await load();
+  winStart = state.start;
+  dashMonthKey = state.start;
+  setView('plan');
+})();
+</script>
+</body>
+</html>
