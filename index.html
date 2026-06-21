@@ -93,7 +93,13 @@
   .menu button.danger .ic{color:var(--over-fg)}
 
   /* ── Legend ── */
-  .legend{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+  .planbar{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px;flex-wrap:wrap}
+  .legend{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .managebtn{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:var(--r-md);
+    border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:13px;font-weight:500;
+    transition:.12s;white-space:nowrap;flex-shrink:0}
+  .managebtn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  .managebtn span{font-size:15px;color:var(--accent)}
   .legend .ttl{font-size:11.5px;font-weight:500;color:var(--ink-3);
     text-transform:uppercase;letter-spacing:.06em;margin-right:4px}
   .chip{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;
@@ -301,7 +307,10 @@
   </div>
 
   <div id="view-plan">
-    <div class="legend" id="legend"></div>
+    <div class="planbar">
+      <div class="legend" id="legend"></div>
+      <button class="managebtn" onclick="openDevManager()"><span aria-hidden="true">◉</span> Manage developers</button>
+    </div>
     <div class="gridwrap"><table class="grid" id="grid"></table></div>
   </div>
 
@@ -313,9 +322,8 @@
 
 <script>
 /* ════════════ STATE ════════════ */
-const NAMES = ["Abhinav Nagar","Madhan Santhanam","Mohammad Akram","Nevishkumar Jariwala",
-  "Nilkanth Verma","Prajakta Jadyar","Rahul Khamankar","Ramisetty Venkatesh",
-  "Sakshi Pabreja","Shubham Taneja","Sunil Kumar R","Udit Gupta"];
+const NAMES = ["Developer 1","Developer 2","Developer 3","Developer 4","Developer 5","Developer 6",
+  "Developer 7","Developer 8","Developer 9","Developer 10","Developer 11","Developer 12"];
 const PALETTE = ["#4F46E5","#0F9D8E","#D8612E","#B23A6B","#3266AD","#6B46C1",
   "#1C7A45","#C28A0E","#9A4DCC","#0E7490","#BE4B4B","#5A6172"];
 const MONTHS_ABBR=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
