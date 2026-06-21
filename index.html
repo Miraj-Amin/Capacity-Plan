@@ -250,6 +250,13 @@
     background:var(--ink);color:#fff;padding:11px 20px;border-radius:var(--r-md);font-size:13px;
     font-weight:450;box-shadow:var(--shadow-lg);opacity:0;transition:.25s;z-index:60;pointer-events:none}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .livepill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;
+    color:var(--ink-3);padding:6px 11px;border:1px solid var(--line);border-radius:20px;
+    background:var(--surface);white-space:nowrap}
+  .livepill .ld{width:7px;height:7px;border-radius:50%;background:#C7CCD6;transition:.2s}
+  .livepill.on{color:var(--ok-fg);border-color:rgba(58,175,107,.4)}
+  .livepill.on .ld{background:var(--ok-solid);animation:pulse 1.8s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   .hidden{display:none !important}
   @media(prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
   .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
@@ -270,6 +277,7 @@
       <button id="tab-dash" onclick="setView('dash')"><span style="font-size:15px">◔</span> Dashboard</button>
     </div>
     <div class="spacer"></div>
+    <span class="livepill" id="livepill"><span class="ld"></span>Live</span>
     <div class="monthnav" id="monthnav-wrap">
       <button onclick="shiftWindow(-1)" aria-label="Earlier months">‹</button>
       <span class="lbl" id="winlbl">—</span>
@@ -316,6 +324,7 @@ const KEY="capacityPlanner.v1";
 const WINDOW=12;
 
 let state, view='plan', winStart, dashMonthKey, editCtx=null;
+let channel=null, recentPushes=[], pendingRemote=null;
 
 function uid(){return Math.random().toString(36).slice(2,9)}
 function monthKey(y,m){return y+"-"+String(m+1).padStart(2,'0')}
@@ -364,14 +373,34 @@ function save(){
   if(!cloud) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async ()=>{
+    const json = JSON.stringify(state);
     try{
       const { error } = await sb.from('plans')
         .update({ state, updated_at: new Date().toISOString() })
         .eq('id', PLAN_ID);
       if(error) throw error;
+      recentPushes.push(json);              // remember our own writes
+      if(recentPushes.length>8) recentPushes.shift();
     }catch(e){ toast('Could not sync to cloud'); }
   }, 600);
 }
+
+function startRealtime(){
+  if(!cloud) return;
+  channel = sb.channel('plans-live')
+    .on('postgres_changes',
+      { event:'UPDATE', schema:'public', table:'plans', filter:'id=eq.'+PLAN_ID },
+      payload=>{
+        const ns = payload.new && payload.new.state;
+        if(!ns || !ns.devs) return;
+        if(recentPushes.includes(JSON.stringify(ns))) return;   // our own echo
+        const sc = document.getElementById('scrim');
+        if(sc.classList.contains('open')){ pendingRemote = ns; return; }  // wait, don't yank an open editor
+        state = ns; cacheLocal(); render(); toast('Updated by a teammate');
+      })
+    .subscribe(status=>setLive(status==='SUBSCRIBED'));
+}
+function setLive(on){ const p=document.getElementById('livepill'); if(p) p.classList.toggle('on', on); }
 
 function windowKeys(startKey){
   const{y,m}=parseKey(startKey);const out=[];
@@ -596,7 +625,7 @@ function addRow(){editCtx.rows.push({id:uid(),label:'',pct:0});renderRows();
   setTimeout(()=>{const ins=document.querySelectorAll('#itemlist .item input.lab');ins[ins.length-1].focus()},20)}
 function delRow(i){editCtx.rows.splice(i,1);if(!editCtx.rows.length)editCtx.rows=[{id:uid(),label:'',pct:0}];renderRows()}
 function quickSet(p){editCtx.rows=p>0?[{id:uid(),label:editCtx.rows[0]?.label||'',pct:p}]:[{id:uid(),label:'',pct:0}];renderRows()}
-function saveCell(){setItems(editCtx.devId,editCtx.mKey,editCtx.rows);closeModal();render();toast('Saved')}
+function saveCell(){setItems(editCtx.devId,editCtx.mKey,editCtx.rows);pendingRemote=null;closeModal();render();toast('Saved')}
 
 /* ════════════ DEV MANAGER ════════════ */
 function openDevManager(){
@@ -623,7 +652,13 @@ function addDev(){state.devs.push({id:uid(),name:'',color:PALETTE[state.devs.len
 function removeDev(id){state.devs=state.devs.filter(d=>d.id!==id);delete state.data[id];save();renderDevList()}
 
 /* ════════════ MODAL/MENU ════════════ */
-function closeModal(){const sc=document.getElementById('scrim');sc.classList.remove('open');setTimeout(()=>sc.innerHTML='',150);editCtx=null}
+function closeModal(){
+  const sc=document.getElementById('scrim');
+  sc.classList.remove('open');
+  setTimeout(()=>sc.innerHTML='',150);
+  editCtx=null;
+  if(pendingRemote){ state=pendingRemote; pendingRemote=null; cacheLocal(); render(); toast('Updated by a teammate'); }
+}
 function toggleMenu(e){e.stopPropagation();document.getElementById('menu').classList.toggle('open')}
 function closeMenu(){document.getElementById('menu').classList.remove('open')}
 document.addEventListener('click',()=>closeMenu());
@@ -676,6 +711,7 @@ function loadSample(){closeMenu();
   winStart = state.start;
   dashMonthKey = state.start;
   setView('plan');
+  startRealtime();
 })();
 </script>
 </body>
